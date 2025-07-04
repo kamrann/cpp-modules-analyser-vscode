@@ -2,8 +2,8 @@ target
 **/node_modules/
 **/dist/
 **/out/
-.vscode-test-web
-.vs/
+**/.vscode-test-web/
+**/.vs/
 resources
 linked_resources
 .env
