@@ -1,0 +1,15 @@
+src/
+bin/
+node_modules/
+resources/
+.git/
+.gitignore
+.vscode/
+.vscode-test
+.vscode-test-web
+tsconfig.json
+tsconfig.tsbuildinfo
+eslint.config.mjs
+
+# Disable WASI for the moment
+dist/wasm/**

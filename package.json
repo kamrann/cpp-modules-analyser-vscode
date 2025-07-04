@@ -1,0 +1,170 @@
+{
+  "name": "cpp-modules-analyser-vscode",
+  "description": "An LSP client for C++20 modules analysis.",
+  "author": "Tokamak Developments GK",
+  "license": "MIT",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Microsoft/vscode-extension-samples"
+  },
+  "publisher": "tokamak",
+  "categories": [
+    "Linters",
+    "Language Packs"
+  ],
+  "keywords": [
+    "WASM",
+    "LSP",
+    "C++",
+    "Modules",
+    "Language Server"
+  ],
+  "engines": {
+    "vscode": "^1.89.0"
+  },
+  "main": "./dist/node/extension-node",
+  "browser": "./dist/browser/extension-browser",
+  "activationEvents": [
+    "workspaceContains:**/*.{cpp,hpp,cppm,mpp,ipp,cxx,hxx,cxxm,mxx,ixx,cc,h}"
+  ],
+  "extensionDependencies": [
+    "ms-vscode.wasm-wasi-core"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "tokamak.cpp-modules-analyser-vscode.viewMode.modulesInfo",
+        "category": "View Mode",
+        "title": "Modules"
+      },
+      {
+        "command": "tokamak.cpp-modules-analyser-vscode.viewMode.importers",
+        "category": "View Mode",
+        "title": "Importers"
+      },
+      {
+        "command": "tokamak.cpp-modules-analyser-vscode.viewMode.importees",
+        "category": "View Mode",
+        "title": "Importees"
+      },
+      {
+        "command": "tokamak.cpp-modules-analyser-vscode.viewMode.select",
+        "category": "View Mode",
+        "title": "Select View Mode",
+        "icon": "$(default-view-icon)"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "cppModules",
+          "name": "Modules"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "tokamak.cpp-modules-analyser-vscode.viewMode.modulesInfo",
+          "when": "view == cppModules",
+          "group": "viewMode"
+        },
+        {
+          "command": "tokamak.cpp-modules-analyser-vscode.viewMode.importers",
+          "when": "view == cppModules",
+          "group": "viewMode"
+        },
+        {
+          "command": "tokamak.cpp-modules-analyser-vscode.viewMode.importees",
+          "when": "view == cppModules",
+          "group": "viewMode"
+        },
+        {
+          "command": "tokamak.cpp-modules-analyser-vscode.viewMode.select",
+          "when": "view == cppModules",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "C++ Modules Analyser",
+      "properties": {
+        "cppModulesAnalyser.globalDefines": {
+          "scope": "resource",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Preprocessor define, e.g. `MY_DEFINE`, `MY_DEFINE=1`, etc."
+          },
+          "default": [],
+          "description": "Global preprocessor macro definitions, applied for all translation units."
+        },
+        "cppModulesAnalyser.externalModules": {
+          "scope": "resource",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Name of an external module"
+          },
+          "default": [],
+          "description": "Names of external modules that are not in the workspace, but are imported by translation units in the workspace."
+        },
+        "cppModulesAnalyser.trace.server": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server."
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@eslint/js": "^9.13.0",
+    "@stylistic/eslint-plugin": "^2.9.0",
+    "@types/node": "^20",
+    "@types/vscode": "^1.89.0",
+    "@vscode/test-web": "^0.0.71",
+    "dotenv-cli": "^8.0.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.13.0",
+    "npm-run-all": "^4.1.5",
+    "serve": "^14.2.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0"
+  },
+  "scripts": {
+    "build": "npm run compile",
+    "serve": "npx serve --cors -l 5000 --ssl-cert $HOME/certs/localhost.pem --ssl-key $HOME/certs/localhost-key.pem",
+    "vscode:prepublish": "npm run build && npm run package-web",
+    "compile-web": "npm run check-types && node bin/esbuild.js browser",
+    "watch-web": "npm-run-all -p watch-web:*",
+    "watch-web:esbuild": "node bin/esbuild.js browser --watch",
+    "watch-web:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package-web": "npm run check-types && node bin/esbuild.js browser --production",
+    "pretest": "npm run compile-web",
+    "test": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/suite/extensionTests.js",
+    "test-in-browser": "dotenv -e .env -- vscode-test-web --browserType=chromium --port=3001 --extensionDevelopmentPath=./ -- \"%TARGET_TEST_WORKSPACE%\"",
+    "compile": "npm run check-types && node bin/esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node bin/esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "lint": "eslint",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vscode/wasm-wasi-lsp": "0.1.0-pre.8",
+    "glob": "^11.0.3",
+    "vscode-uri": "^3.1.0"
+  }
+}
