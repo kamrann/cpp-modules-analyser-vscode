@@ -10,6 +10,7 @@ resources/
 tsconfig.json
 tsconfig.tsbuildinfo
 eslint.config.mjs
+.env
 
 # Disable WASI for the moment
 dist/wasm/**
