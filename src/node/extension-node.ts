@@ -7,10 +7,10 @@ import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import { createUriConverters } from '@vscode/wasm-wasi-lsp';
 import { determineServerOptionsDesktop } from '../server-config/server-options-configuration-desktop';
-import { clientName, initializeClient } from '../lsp-client';
+import { clientName, getDocumentFilterPatterns, initializeClient, oneTimeInit, shutdownClient, validateConfiguration } from '../lsp-client';
 import { getEnvConfigurationOverrides } from '../server-config/server-config-env';
 
-let client: LanguageClient;
+let client: LanguageClient | undefined;
 
 const platformNotSupported = 'Error: extension does not support this platform.';
 
@@ -45,30 +45,61 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const envOverrides = getEnvConfigurationOverrides();
   const serverOptions: ServerOptions = determineServerOptionsDesktop(context, channel, nativeExePath, envOverrides);
 
-  const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ pattern: "**/*.{cpp,cppm,mpp,ipp,cxx,cxxm,mxx,ixx,cc}" }], //hpp,hxx,h  // language: 'c++', 
-    outputChannel: channel,
-    uriConverters: createUriConverters(),
-    initializationOptions: {},
-    synchronize: {
-      configurationSection: 'cppModulesAnalyser'
-      // @todo: look into how this fits in (taken from https://code.visualstudio.com/api/language-extensions/language-server-extension-guide)
-      // // Notify the server about file changes to '.clientrc files contained in the workspace
-      // fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
+  oneTimeInit(context);
+
+  const restartClient = async () => {
+    if (client) {
+      shutdownClient(context, client);
+      client = undefined;
+    }
+
+    const generateClientOptions = (): LanguageClientOptions => {
+      try {
+        let docFilter = getDocumentFilterPatterns().include.map(p => ({ pattern: p }));
+        return {
+          documentSelector: docFilter,
+          outputChannel: channel,
+          uriConverters: createUriConverters(),
+          initializationOptions: {},
+          synchronize: {
+            configurationSection: clientName
+            // @todo: look into how this fits in (taken from https://code.visualstudio.com/api/language-extensions/language-server-extension-guide)
+            // // Notify the server about file changes to '.clientrc files contained in the workspace
+            // fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
+          }
+        };
+      } catch (err) {
+        throw 'Error creating client options; check modules analyser `cppSources` configuration setting.';
+      }
+    }
+
+    const clientOptions: LanguageClientOptions = generateClientOptions();
+    client = new LanguageClient(clientName, 'C++ Modules Analyser LSP Client', serverOptions, clientOptions);
+    initializeClient(context, client);
+
+    try {
+      await client.start();
+    }
+    catch (error) {
+      client.error(`Start failed`, error, 'force');
     }
   };
 
-  client = new LanguageClient(clientName, 'C++ Modules Analyser LSP Client', serverOptions, clientOptions);
-  initializeClient(context, client);
+  vscode.workspace.onDidChangeConfiguration(async (e) => {
+    if (e.affectsConfiguration(clientName)) {
+      validateConfiguration(vscode.workspace.getConfiguration(clientName), e);
+    }
 
-  try {
-    await client.start();
-  }
-  catch (error) {
-    client.error(`Start failed`, error, 'force');
-  }
+    // Restart client if source patterns changed
+    if (e.affectsConfiguration(clientName + '.cppSources')) {
+      await client?.stop();
+      await restartClient();
+    }
+  });
+
+  await restartClient();
 }
 
 export function deactivate() {
-  return client.stop();
+  return client?.stop();
 }

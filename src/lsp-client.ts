@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as vscode from 'vscode';
-import { BaseLanguageClient, ResponseError } from 'vscode-languageclient';
+import { BaseLanguageClient, GenericNotificationHandler, ResponseError } from 'vscode-languageclient';
 import { Utils } from 'vscode-uri';
 import { ModulesTreeProvider } from './ui/modules-tree';
 import { ModuleUnitImportsTreeProvider } from './ui/module-unit-imports-tree';
@@ -14,10 +14,46 @@ import { DelegatingTreeDataProvider } from './ui/tree-provider';
 
 export const clientName = 'cppModulesAnalyser';
 
-export function initializeClient(context: vscode.ExtensionContext, client: BaseLanguageClient) {
-  const commandId = (id: string) => {
-    return `tokamak.cpp-modules-analyser-vscode.${id}`;
+export function validateConfiguration(config: vscode.WorkspaceConfiguration, event: vscode.ConfigurationChangeEvent | undefined = undefined) {
+  if (!event || event.affectsConfiguration(clientName + '.sourceFileExtensions')) {
+    const existing = config.get<string[]>('sourceFileExtensions', []);
+    const validated = existing
+      .map(ext => ext.trim())
+      .filter(ext => ext.length > 0)
+      .map(ext => ext.startsWith('.') ? ext : ('.' + ext));
+    if (validated.length != existing.length || !validated.every((ext, i) => ext === existing[i])) {
+      config.update('sourceFileExtensions', validated, vscode.ConfigurationTarget.Global /* !!!!!!!!!!!!!!!!!!!!! */);
+    }
+  }
+}
+
+export function getDocumentFilterPatterns() {
+  const defaultPatterns = {
+    include: [
+      "**/*.{cpp,cppm,cxx,cxxm,cc,ccm,ixx}"
+    ],
+    exclude: [],
   };
+  const patterns = vscode.workspace.getConfiguration(clientName).get('cppSources', defaultPatterns);
+  if (patterns.include === undefined) {
+    patterns.include = [];
+  }
+  if (patterns.exclude === undefined) {
+    patterns.exclude = [];
+  }
+  return patterns;
+}
+
+const commandId = (id: string) => {
+  return `tokamak.cpp-modules-analyser-vscode.${id}`;
+};
+
+let handlePublishModulesInfo: GenericNotificationHandler;
+let devRecompileCmd: vscode.Disposable | undefined;
+
+export function oneTimeInit(context: vscode.ExtensionContext) {
+  const config = vscode.workspace.getConfiguration(clientName);
+  validateConfiguration(config);
 
   enum ViewMode {
     modules,
@@ -27,15 +63,15 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
 
   const modulesData = new ModulesModel();
 
-  const formatModulesPendingMessage = () => {
-    return `${modulesData.isEmpty == false ? "⚠️ Below modules information is out of date. " : ""}Recalculating...`;
-  };
-
   interface ViewModeState {
     displayName: string,
     provider: vscode.TreeDataProvider<vscode.TreeItem>;
     message: string | undefined;
   }
+
+  const formatModulesPendingMessage = () => {
+    return `${modulesData.isEmpty == false ? "⚠️ Below modules information is out of date. " : ""}Recalculating...`;
+  };
 
   const viewModes: Record<ViewMode, ViewModeState> = {
     [ViewMode.modules]: { displayName: "Basic Info", provider: new ModulesTreeProvider(modulesData), message: formatModulesPendingMessage() },
@@ -97,38 +133,7 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     }
   }));
 
-  client.onRequest('cppModulesAnalyser/enumerateWorkspaceFolderContents', async (params) => {
-    const documents: { uri: string, filepath: String }[] = [];
-    const tempExtensions = ['.cpp', '.cppm', '.mpp', '.ipp', '.cxx', '.cxxm', '.mxx', '.ixx', '.cc'] as const;
-
-    const recursiveEnumerate = async (folderUri: vscode.Uri) => {
-      const entries = await vscode.workspace.fs.readDirectory(folderUri);
-      for (const [name, fileType] of entries) {
-        const entryUri = vscode.Uri.joinPath(folderUri, name);
-        if (fileType === vscode.FileType.File) {
-          if (tempExtensions.includes(Utils.extname(entryUri) as any)) {
-            documents.push({ uri: client.code2ProtocolConverter.asUri(entryUri), filepath: entryUri.fsPath });
-          }
-        } else if (fileType === vscode.FileType.Directory) {
-          await recursiveEnumerate(entryUri);
-        }
-      }
-    };
-
-    try {
-      const uri = client.protocol2CodeConverter.asUri(params.folderUri);
-      await recursiveEnumerate(uri);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return new ResponseError(-32803, message); // @todo: this is RequestFailed. suspect vscode has wrappers for these?
-    }
-
-    return {
-      documents,
-    };
-  });
-
-  client.onNotification('cppModulesAnalyser/publishModulesInfo', (params) => {
+  handlePublishModulesInfo = (params) => {
     let message: string | undefined = undefined;
     switch (params.event) {
       case 'update':
@@ -149,5 +154,77 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     updateViewModeMessage(ViewMode.modules, message);
     updateViewModeMessage(ViewMode.importers, message);
     updateViewModeMessage(ViewMode.importees, message);
+  };
+}
+
+export function initializeClient(context: vscode.ExtensionContext, client: BaseLanguageClient) {
+  client.onRequest('cppModulesAnalyser/enumerateWorkspaceFolderContents', async (params) => {
+    // const documents: { uri: string, filepath: string }[] = [];
+    // const extensions = vscode.workspace.getConfiguration(clientName).get('sourceFileExtensions', []);
+
+    // const recursiveEnumerate = async (folderUri: vscode.Uri) => {
+    //   const entries = await vscode.workspace.fs.readDirectory(folderUri);
+    //   for (const [name, fileType] of entries) {
+    //     const entryUri = vscode.Uri.joinPath(folderUri, name);
+    //     if (fileType === vscode.FileType.File) {
+    //       // @note: feels like most robust way to test, allowing for possibility of double extensions, etc.
+    //       if (extensions.find(ext => entryUri.path.endsWith(ext)) !== undefined) {
+    //         documents.push({ uri: client.code2ProtocolConverter.asUri(entryUri), filepath: entryUri.fsPath });
+    //       }
+    //     } else if (fileType === vscode.FileType.Directory) {
+    //       await recursiveEnumerate(entryUri);
+    //     }
+    //   }
+    // };
+
+    // try {
+    //   const uri = client.protocol2CodeConverter.asUri(params.folderUri);
+    //   await recursiveEnumerate(uri);
+    // } catch (err) {
+    //   const message = err instanceof Error ? err.message : String(err);
+    //   return new ResponseError(-32803, message); // @todo: this is RequestFailed. suspect vscode has wrappers for these?
+    // }
+
+    const patterns: { include: string[], exclude: string[] } = getDocumentFilterPatterns();
+
+    const unionUris = (uris: vscode.Uri[][]) => {
+      const op = (union: Set<vscode.Uri>, uris: vscode.Uri[]) => {
+        for (const uri of uris) {
+          union.add(uri);
+        }
+        return union;
+      };
+      return uris.reduce(op, new Set<vscode.Uri>());
+    };
+
+    const includeSet = async () => {
+      const raw = await Promise.all(patterns.include.map(p => vscode.workspace.findFiles(p)));
+      return unionUris(raw);
+    };
+    const excludeSet = async () => {
+      const raw = await Promise.all(patterns.exclude.map(p => vscode.workspace.findFiles(p)));
+      return unionUris(raw);
+    };
+
+    const [toInclude, toExclude] = await Promise.all([includeSet(), excludeSet()]);
+    // because JS
+    const toExcludeStrings = new Set([...toExclude].map(uri => uri.toString()));
+    const results = [...toInclude].filter(x => !toExcludeStrings.has(x.toString()));
+
+    return {
+      documents: results.map(uri => ({ uri: client.code2ProtocolConverter.asUri(uri), filepath: uri.fsPath })),
+    };
   });
+
+  client.onNotification('cppModulesAnalyser/publishModulesInfo', handlePublishModulesInfo);
+
+  // @todo: make conditional based on dev build
+  devRecompileCmd = vscode.commands.registerCommand(commandId('dev.recompileToolchain'), () => {
+    client.sendNotification('cppModulesAnalyser/dev/recompileToolchain');
+  });
+}
+
+export function shutdownClient(context: vscode.ExtensionContext, client: BaseLanguageClient) {
+  devRecompileCmd?.dispose();
+  devRecompileCmd = undefined;
 }

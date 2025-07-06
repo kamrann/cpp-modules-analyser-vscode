@@ -26,7 +26,7 @@
   "main": "./dist/node/extension-node",
   "browser": "./dist/browser/extension-browser",
   "activationEvents": [
-    "workspaceContains:**/*.{cpp,hpp,cppm,mpp,ipp,cxx,hxx,cxxm,mxx,ixx,cc,h}"
+    "workspaceContains:**/*.{cpp,hpp,cppm,mpp,ipp,cxx,hxx,cxxm,mxx,ixx,cc,ccm,h}"
   ],
   "extensionDependencies": [
     "ms-vscode.wasm-wasi-core"
@@ -56,6 +56,11 @@
         "category": "View Mode",
         "title": "Select View Mode",
         "icon": "$(default-view-icon)"
+      },
+      {
+        "command": "tokamak.cpp-modules-analyser-vscode.dev.recompileToolchain",
+        "category": "Development",
+        "title": "Recompile Analyser Toolchain"
       }
     ],
     "views": {
@@ -94,6 +99,35 @@
       "type": "object",
       "title": "C++ Modules Analyser",
       "properties": {
+        "cppModulesAnalyser.cppSources": {
+          "scope": "resource",
+          "type": "object",
+          "properties": {
+            "include": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [
+                "**/*.{cpp,cppm,cxx,cxxm,cc,ccm,ixx}"
+              ],
+              "description": "Glob patterns of files to treat as c++ sources. Relative to workspace root(s)."
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "Glob pattern of files to exclude from the c++ sources set defined by `include`."
+            }
+          },
+          "default": {
+            "include": "**/*.{cpp,cppm,cxx,cxxm,cc,ccm,ixx}"
+          },
+          "additionalProperties": false,
+          "description": "Patterns specifying the files in the workspace to be evaluated as c++ sources. Translation units only; do not include headers."
+        },
         "cppModulesAnalyser.globalDefines": {
           "scope": "resource",
           "type": "array",
