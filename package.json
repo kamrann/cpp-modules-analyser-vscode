@@ -1,5 +1,6 @@
 {
   "name": "cpp-modules-analyser-vscode",
+  "displayName": "C++ Modules Analyser",
   "description": "An LSP client for C++20 modules analysis.",
   "author": "Tokamak Developments GK",
   "license": "MIT",
