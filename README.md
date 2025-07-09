@@ -25,11 +25,16 @@ The analysis is implemented through the LSP protocol. It is designed update in r
 
 ## Usage
 
-The extension should auto-activate for any workspace containing sources with typical C++ file extensions. You should then see an additional view named 'MODULES' (initially collapsed) in the EXPLORER tab. Use the dropdown icon in the top right to toggle the view mode.
+The extension should auto-activate for any workspace containing sources with typical C++ file extensions. You should see an additional view named 'MODULES' (initially collapsed) in the EXPLORER tab. Use the dropdown icon in the top right to toggle the view mode.
 
 Any detected issues will be presented in the usual PROBLEMS tab.
 
 There is also a *C++ Modules Analyser* channel added in the OUTPUT tab with some logging.
+
+The extension exposes the following configuration settings, under *Extensions | C++ Modules Analyser*:
+- *Cpp Sources*: Lists of include/exclude file globs, determining which files in the workspace are processed as C++ translation units.
+- *Global Defines*: List of preprocessor defines.
+- *External Modules*: Module names can be given here for any modules that the project imports but which are not defined within the workspace. Note: all such external modules must be specified, but currently are not included in the resulting output.
 
 ## Limitations
 
