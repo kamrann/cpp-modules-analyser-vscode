@@ -41,10 +41,13 @@ Currently the extension treats all files with accepted extension in the entire w
 
 ### C++ Preprocessor
 The preprocessor implementation is very minimal. In particular:
-- Basic `#if`-family conditionals are supported, along with using predefined program wide macro definitions and a minimal set of operators in the condition expressions.
-- No support for function-like macros.
+- `#ifdef`, `#ifndef` conditionals are supported with predefined program wide macro definitions.
 - No support for macros defined in the source code via `#define`.
+- No support for constant expressions within `#if` (including `#if defined`).
+- No support for function-like macros.
 - `#includes` are not processed, so any `import`s in headers will be missed.
+The intention is that the above unsupported elements should all parse, but the blocks will not be evaluated.
+
 Improved preprocessor support will be an ongoing task.
 
 ### Missing diagnostics
