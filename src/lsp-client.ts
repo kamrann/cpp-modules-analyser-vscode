@@ -48,6 +48,7 @@ const commandId = (id: string) => {
   return `tokamak.cpp-modules-analyser-vscode.${id}`;
 };
 
+let handlePublishTranslationUnitInfo: GenericNotificationHandler;
 let handlePublishModulesInfo: GenericNotificationHandler;
 let devRecompileCmd: vscode.Disposable | undefined;
 
@@ -61,6 +62,7 @@ export function oneTimeInit(context: vscode.ExtensionContext) {
     importees,
   }
 
+  // @todo: feels like this should probably be recreated and scoped to client init?
   const modulesData = new ModulesModel();
 
   interface ViewModeState {
@@ -132,6 +134,11 @@ export function oneTimeInit(context: vscode.ExtensionContext) {
       activateViewMode(selection.mode);
     }
   }));
+
+  handlePublishTranslationUnitInfo = (params, client: BaseLanguageClient) => {
+    const temp = params.pp_tokens.join(' ');
+    client.outputChannel.appendLine(temp);
+  }
 
   handlePublishModulesInfo = (params) => {
     let message: string | undefined = undefined;
@@ -216,12 +223,103 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     };
   });
 
+  interface PreprocessedTU {
+    ppTokens: string[];
+    tokens: string[];
+  }
+  const preprocessedTUs: Record<string, PreprocessedTU> = {};
+
+  const TUQueryKeys = {
+    view: 'view',
+  } as const;
+
+  const TUViewModeParams = {
+    ppTokens: 'pp-tokens',
+    preprocessed: 'preprocessed',
+  } as const;
+
+  const preprocessedSourceProvider = new (class implements vscode.TextDocumentContentProvider {
+    onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
+    onDidChange = this.onDidChangeEmitter.event;
+
+    provideTextDocumentContent(uri: vscode.Uri): string | undefined {
+      const baseUri = uri.with({ query: '', fragment: '' });
+      const tu = preprocessedTUs[baseUri.toString()];
+      if (!tu) {
+        // may make more sense to show a notification or log something
+        return undefined; //'<unavailable>';
+      }
+      const queryParams = new URLSearchParams(uri.query);
+      switch (queryParams.get(TUQueryKeys.view)) {
+        case TUViewModeParams.ppTokens:
+          return tu.ppTokens.join(' ');
+        case TUViewModeParams.preprocessed:
+          return tu.tokens.join(' ');
+        default:
+          return undefined;
+      }
+    }
+  })();
+
+  const preprocessedScheme = 'cpp-ma';
+
+  client.onNotification('cppModulesAnalyser/publishTranslationUnitInfo', (params) => {
+    //handlePublishTranslationUnitInfo(params, client, preprocessedTUs);
+    const fileUri = client.protocol2CodeConverter.asUri(params.uri);
+    const ppUri = fileUri.with({ scheme: preprocessedScheme });
+    switch (params.event) {
+      case 'update':
+        preprocessedTUs[ppUri.toString()] = {
+          ppTokens: params.ppTokens,
+          tokens: params.tokens,
+        };
+        break;
+      // need to update, think server currently sends this in case of preprocessor fail
+      case 'pending':
+        delete preprocessedTUs[ppUri.toString()];
+        break;
+    }
+    preprocessedSourceProvider.onDidChangeEmitter.fire(ppUri);
+  });
   client.onNotification('cppModulesAnalyser/publishModulesInfo', handlePublishModulesInfo);
 
   // @todo: make conditional based on dev build
   devRecompileCmd = vscode.commands.registerCommand(commandId('dev.recompileToolchain'), () => {
     client.sendNotification('cppModulesAnalyser/dev/recompileToolchain');
   });
+
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(preprocessedScheme, preprocessedSourceProvider));
+
+  const openVirtualSourceView = async (view: string) => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return;
+    }
+
+    const currentDoc = editor.document;
+
+    const query = new URLSearchParams({ [TUQueryKeys.view]: view })
+    const ppUri = currentDoc.uri.with({
+      scheme: preprocessedScheme,
+      query: query.toString(),
+    });
+    const ppDoc = await vscode.workspace.openTextDocument(ppUri);
+    await vscode.window.showTextDocument(ppDoc, {
+      viewColumn: vscode.ViewColumn.Beside,
+      preserveFocus: true,
+      preview: true,
+    });
+  };
+
+  const openPPTokensSourceCommand = vscode.commands.registerCommand(commandId('openPPTokens'), async () => {
+    await openVirtualSourceView(TUViewModeParams.ppTokens);
+  });
+  const openPreprocessedSourceCommand = vscode.commands.registerCommand(commandId('openPreprocessed'), async () => {
+    await openVirtualSourceView(TUViewModeParams.preprocessed);
+  });
+
+  context.subscriptions.push(openPPTokensSourceCommand);
+  context.subscriptions.push(openPreprocessedSourceCommand);
 }
 
 export function shutdownClient(context: vscode.ExtensionContext, client: BaseLanguageClient) {

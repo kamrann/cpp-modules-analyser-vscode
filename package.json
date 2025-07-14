@@ -62,6 +62,16 @@
         "command": "tokamak.cpp-modules-analyser-vscode.dev.recompileToolchain",
         "category": "Development",
         "title": "Recompile Analyser Toolchain"
+      },
+      {
+        "command": "tokamak.cpp-modules-analyser-vscode.openPPTokens",
+        "category": "Development",
+        "title": "Open PP Tokens"
+      },
+      {
+        "command": "tokamak.cpp-modules-analyser-vscode.openPreprocessed",
+        "category": "Development",
+        "title": "Open Preprocessed"
       }
     ],
     "views": {
@@ -93,6 +103,16 @@
           "command": "tokamak.cpp-modules-analyser-vscode.viewMode.select",
           "when": "view == cppModules",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "tokamak.cpp-modules-analyser-vscode.openPPTokens",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "tokamak.cpp-modules-analyser-vscode.openPreprocessed",
+          "when": "editorTextFocus"
         }
       ]
     },
