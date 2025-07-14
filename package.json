@@ -116,6 +116,18 @@
         }
       ]
     },
+    "customEditors": [
+      {
+        "viewType": "tokamak.cpp-modules-analyser-vscode.processedSourceView",
+        "displayName": "CPP-MA Processed Source View",
+        "selector": [
+          {
+            "filenamePattern": "**/*.processed"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "C++ Modules Analyser",

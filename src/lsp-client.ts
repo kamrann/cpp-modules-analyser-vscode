@@ -11,6 +11,7 @@ import { ModuleUnitImportsTreeProvider } from './ui/module-unit-imports-tree';
 import { ModuleUnitImporteesTreeProvider } from './ui/module-unit-importees-tree';
 import { ModulesModel } from './modules-model';
 import { DelegatingTreeDataProvider } from './ui/tree-provider';
+import { ProcessedSourceViewEditorProvider } from './processed-view/processed-view-custom-editor';
 
 export const clientName = 'cppModulesAnalyser';
 
@@ -134,6 +135,8 @@ export function oneTimeInit(context: vscode.ExtensionContext) {
       activateViewMode(selection.mode);
     }
   }));
+
+  context.subscriptions.push(ProcessedSourceViewEditorProvider.register(context));
 
   handlePublishTranslationUnitInfo = (params, client: BaseLanguageClient) => {
     const temp = params.pp_tokens.join(' ');
@@ -331,6 +334,15 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
       query: query.toString(),
     });
     const ppDoc = await vscode.workspace.openTextDocument(virtualUri);
+
+    // @note: incomplete and seems a bit unpredictable. anyway probably not worth it since using a custom text editor means we lose
+    // ability to treat our views as source code and get associated behaviour, like for example sending the processed code back to the lsp
+    // for syntax highlighting and such.
+    //await vscode.commands.executeCommand('vscode.openWith', virtualUri, 'tokamak.cpp-modules-analyser-vscode.processedSourceView');
+
+    // @todo: so reverting to default text editor, but this means we lose ability to customize anything, such as tab label.
+    // might be better to encode the view (pp-tokens, preprocessed, etc) into the path (path/to/filename.pp-tokens) to allow easy differentiation and 
+    // opening of multiple views.
 
     await vscode.window.showTextDocument(ppDoc, {
       viewColumn: vscode.ViewColumn.Beside,
