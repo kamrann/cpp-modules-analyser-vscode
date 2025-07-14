@@ -238,9 +238,19 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     preprocessed: 'preprocessed',
   } as const;
 
+  const virtualUriScheme = 'cpp-ma';
+
+  const adaptUriForProcessed = (uri: vscode.Uri) => {
+    return uri.with({
+      scheme: virtualUriScheme,
+      path: uri.path + '.' + 'processed',
+    });
+  };
+
   const preprocessedSourceProvider = new (class implements vscode.TextDocumentContentProvider {
     onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
     onDidChange = this.onDidChangeEmitter.event;
+    activeUris = new Set<vscode.Uri>(); // @todo: how to remove?
 
     provideTextDocumentContent(uri: vscode.Uri): string | undefined {
       const baseUri = uri.with({ query: '', fragment: '' });
@@ -252,34 +262,52 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
       const queryParams = new URLSearchParams(uri.query);
       switch (queryParams.get(TUQueryKeys.view)) {
         case TUViewModeParams.ppTokens:
+          this.activeUris.add(uri);
           return tu.ppTokens.join(' ');
         case TUViewModeParams.preprocessed:
+          this.activeUris.add(uri);
           return tu.tokens.join(' ');
         default:
           return undefined;
       }
     }
+
+    onBaseUriChanged(baseUri: vscode.Uri) {
+      const matches = (uri: vscode.Uri) => {
+        return uri.with({ query: '', fragment: '' }).toString() === baseUri.toString();
+      };
+      for (const uri of this.activeUris) {
+        if (matches(uri)) {
+          this.onDidChangeEmitter.fire(uri);
+        }
+      }
+    }
   })();
 
-  const preprocessedScheme = 'cpp-ma';
+  vscode.workspace.onDidCloseTextDocument(doc => {
+    if (doc.uri.scheme === virtualUriScheme) {
+      preprocessedSourceProvider.activeUris.delete(doc.uri);
+    }
+  });
 
   client.onNotification('cppModulesAnalyser/publishTranslationUnitInfo', (params) => {
     //handlePublishTranslationUnitInfo(params, client, preprocessedTUs);
     const fileUri = client.protocol2CodeConverter.asUri(params.uri);
-    const ppUri = fileUri.with({ scheme: preprocessedScheme });
+    const virtualUri = adaptUriForProcessed(fileUri);
     switch (params.event) {
       case 'update':
-        preprocessedTUs[ppUri.toString()] = {
+        preprocessedTUs[virtualUri.toString()] = {
           ppTokens: params.ppTokens,
           tokens: params.tokens,
         };
         break;
       // need to update, think server currently sends this in case of preprocessor fail
       case 'pending':
-        delete preprocessedTUs[ppUri.toString()];
+        delete preprocessedTUs[virtualUri.toString()];
         break;
     }
-    preprocessedSourceProvider.onDidChangeEmitter.fire(ppUri);
+    //preprocessedSourceProvider.onDidChangeEmitter.fire(virtualUri);
+    preprocessedSourceProvider.onBaseUriChanged(virtualUri);
   });
   client.onNotification('cppModulesAnalyser/publishModulesInfo', handlePublishModulesInfo);
 
@@ -288,7 +316,7 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     client.sendNotification('cppModulesAnalyser/dev/recompileToolchain');
   });
 
-  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(preprocessedScheme, preprocessedSourceProvider));
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(virtualUriScheme, preprocessedSourceProvider));
 
   const openVirtualSourceView = async (view: string) => {
     const editor = vscode.window.activeTextEditor;
@@ -299,11 +327,11 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     const currentDoc = editor.document;
 
     const query = new URLSearchParams({ [TUQueryKeys.view]: view })
-    const ppUri = currentDoc.uri.with({
-      scheme: preprocessedScheme,
+    const virtualUri = adaptUriForProcessed(currentDoc.uri).with({
       query: query.toString(),
     });
-    const ppDoc = await vscode.workspace.openTextDocument(ppUri);
+    const ppDoc = await vscode.workspace.openTextDocument(virtualUri);
+
     await vscode.window.showTextDocument(ppDoc, {
       viewColumn: vscode.ViewColumn.Beside,
       preserveFocus: true,

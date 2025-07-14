@@ -108,11 +108,11 @@
       "editor/context": [
         {
           "command": "tokamak.cpp-modules-analyser-vscode.openPPTokens",
-          "when": "editorTextFocus"
+          "when": "resourceScheme != cpp-ma && editorTextFocus"
         },
         {
           "command": "tokamak.cpp-modules-analyser-vscode.openPreprocessed",
-          "when": "editorTextFocus"
+          "when": "resourceScheme != cpp-ma && editorTextFocus"
         }
       ]
     },
