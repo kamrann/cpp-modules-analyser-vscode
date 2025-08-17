@@ -5,6 +5,7 @@ resources/
 .git/
 .gitignore
 .vscode/
+.vs/
 .vscode-test
 .vscode-test-web
 tsconfig.json
