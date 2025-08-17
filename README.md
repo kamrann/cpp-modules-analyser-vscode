@@ -42,25 +42,21 @@ The aim at this stage is for the extension to be usable with simple, greenfield 
 
 ### Program/Project structure
 
-Currently the extension treats all files with accepted extension in the entire workspace (including all roots in a multi-root workspace) as a single C++ program for the purposes of the analysis. This is of course not practical for use with real world projects, so support for *compile-commands.json* is planned.
+Currently the extension allows for glob-based specification of the files in the workspace which should be considered as translation units, but then operates under the assumption that all those files together form a single C++ program for the purposes of the analysis. This is of course not practical for use with real world projects which can have multiple build targets under a workspace folder, so support for *compile-commands.json* is planned.
 
 ### C++ Preprocessor
-The preprocessor implementation is very minimal. In particular:
-- `#ifdef`, `#ifndef` conditionals are supported with predefined program wide macro definitions.
-- No support for macros defined in the source code via `#define`.
-- No support for constant expressions within `#if` (including `#if defined`).
-- No support for function-like macros.
+The preprocessor implementation is limited, but growing. In particular:
+- Conditional inclusion with `#if` and variants should now be largely supported, using both predefined program wide object-like macro definitions and `#define`s in the code. However, preprocessor constant expression syntax is still not 100% conformant.
+- Preprocessor operators `#` and `##` are implemented but have had minimal testing.
+- `__VA_OPT__` is not implemented.
 - `#includes` are not processed, so any `import`s in headers will be missed.
-The intention is that the above unsupported elements should all parse, but the blocks will not be evaluated.
-
-Improved preprocessor support will be an ongoing task.
-
-### Missing diagnostics
-- Handling of `export` is not yet implemented, so diagnosing a failure to export all interface partitions from the primary module unit is currently missing.
+- `__cplusplus`, `__FILE__`, `__DATE__` and `__TIME__` are pending proper implementation and will just expand to placeholders.
+- No support yet for defining function-like macros through the global defines.
+- Some whitespace usages within preprocessor directives is not correctly handled. Generally this will manifest as being too permissive.
 
 ### Other pending issues
 - Reported problems will link to a source file where applicable, but currently have no line-level anchors.
 
 ## Requirements
 
-Currently limited to VS Code Desktop running on Windows.
+Currently limited to VS Code Desktop, Windows and Linux (untested).
