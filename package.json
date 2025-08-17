@@ -143,7 +143,7 @@
               },
               "default": [
                 [
-                  "**/*.{cpp,cppm,cxx,cxxm,cc,ccm,ixx}"
+                  "**/*.{cpp,cppm,cxx,cxxm,mxx,cc,ccm,ixx}"
                 ]
               ],
               "description": "Glob patterns of files to treat as c++ sources. Relative to workspace root(s)."
@@ -158,7 +158,9 @@
             }
           },
           "default": {
-            "include": "**/*.{cpp,cppm,cxx,cxxm,cc,ccm,ixx}"
+            "include": [
+              "**/*.{cpp,cppm,cxx,cxxm,mxx,cc,ccm,ixx}"
+            ]
           },
           "additionalProperties": false,
           "description": "Patterns specifying the files in the workspace to be evaluated as c++ sources. Translation units only; do not include headers."
