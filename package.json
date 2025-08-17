@@ -183,6 +183,12 @@
           "default": [],
           "description": "Names of external modules that are not in the workspace, but are imported by translation units in the workspace."
         },
+        "cppModulesAnalyser.tempPermissive": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": false,
+          "description": "Permits some things specified as ill-formed by the standard but widely undiagnosed by existing compiler implementations."
+        },
         "cppModulesAnalyser.trace.server": {
           "scope": "window",
           "type": "string",
