@@ -142,7 +142,9 @@
                 "type": "string"
               },
               "default": [
-                "**/*.{cpp,cppm,cxx,cxxm,cc,ccm,ixx}"
+                [
+                  "**/*.{cpp,cppm,cxx,cxxm,cc,ccm,ixx}"
+                ]
               ],
               "description": "Glob patterns of files to treat as c++ sources. Relative to workspace root(s)."
             },
