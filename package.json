@@ -175,6 +175,16 @@
           "default": [],
           "description": "Global preprocessor macro definitions, applied for all translation units."
         },
+        "cppModulesAnalyser.includePaths": {
+          "scope": "resource",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Include search path."
+          },
+          "default": [],
+          "description": "Global include search paths, applied for all translation units."
+        },
         "cppModulesAnalyser.externalModules": {
           "scope": "resource",
           "type": "array",
