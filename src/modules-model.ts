@@ -37,9 +37,16 @@ export interface ModuleImport {
   ref: ModuleInfo | ModuleUnitInfo;
 }
 
+export interface TransitiveImport {
+  readonly moduleName: string;
+  readonly partitionName: string | undefined;
+  ref: ModuleInfo | ModuleUnitInfo;
+}
+
 export interface TranslationUnitInfo {
   readonly uri: vscode.Uri;
   /*readonly*/ imports: ModuleImport[]; // @todo: non-readonly pending better solution then external module exclusion
+  transitiveImports: TransitiveImport[];
   readonly isModuleUnit: boolean;
 }
 
@@ -138,17 +145,21 @@ export class ModulesModel {
       this.onError("URI converters unavailable");
     }
 
-    const isModuleUnit = (tu: RawTranslationUnitInfo) => tu.result.module_unit.variant === 0;
+    const isModuleUnit = (tu: RawTranslationUnitInfo) => tu.module_unit.variant === 0;
     const convertTranslationUnit = (tu: RawTranslationUnitInfo, isModuleUnit: boolean) => {
       // @note: seems iffy to use this function imported from vscode/wasm-wasi-lsp, since this is just a VS Code <-> LSP conversion.
       // but seems to work (despite added a / before the drive letter), whereas Uri.parse gives us /workspace/... which is apparently not what VS Code wants...
       const uri = uriConverters.protocol2Code(tu.identifier); //vscode.Uri.parse(tu.identifier),
       return {
         uri: uri,
-        imports: tu.result.imports.map((imp: any) => ({
+        imports: tu.imports.map((imp: any) => ({
           name: imp.data.name.join("."),
           isPartition: imp.data.is_partition,
           ref: null,
+        })),
+        transitiveImports: tu.transitive_imports.map((timp: any) => ({
+          moduleName: timp.module_name.join("."),
+          partitionName: timp.partition_name.variant === 0 ? timp.partition_name.value.join(".") : undefined,
         })),
         isModuleUnit: isModuleUnit,
       };
@@ -170,7 +181,7 @@ export class ModulesModel {
     };
     const translationUnitConverter = (tu: RawTranslationUnitInfo) => {
       if (isModuleUnit(tu)) {
-        return convertModuleUnit(convertTranslationUnit(tu, true), tu.result.module_unit.value);
+        return convertModuleUnit(convertTranslationUnit(tu, true), tu.module_unit.value);
       } else {
         return convertTranslationUnit(tu, false);
       }
@@ -200,6 +211,7 @@ export class ModulesModel {
     // for now, we just remove any imports of external modules
     for (const tu of this.translationUnits) {
       tu.imports = tu.imports.filter(imp => imp.isPartition || tryFindModule(imp.name));
+      tu.transitiveImports = tu.transitiveImports.filter(timp => timp.partitionName || tryFindModule(timp.moduleName));
     }
 
     const findModule = (name: string): ModuleInfo => {
@@ -234,6 +246,13 @@ export class ModulesModel {
         } else {
           imp.ref = resolveModuleImport(imp.name);
           imp.ref.primary.importers.push(tu);
+        }
+      }
+      for (const timp of tu.transitiveImports) {
+        if (timp.partitionName) {
+          timp.ref = findModulePartition(timp.moduleName, timp.partitionName);
+        } else {
+          timp.ref = findModule(timp.moduleName);
         }
       }
 

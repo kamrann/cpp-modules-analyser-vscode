@@ -48,6 +48,8 @@ class TranslationUnitItem extends ModuleUnitImportsTreeItem {
   ) {
     super(translationUnitDisplayName(translationUnitInfo), translationUnitInfo.imports.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
     treeUtils.configureTranslationUnitTreeItem(this, translationUnitInfo);
+    this.description = `[${translationUnitInfo.imports.length}/${translationUnitInfo.transitiveImports.length}] ${this.description}`
+    this.tooltip = `${this.tooltip}\n${translationUnitInfo.imports.length} directly imported module units\n${translationUnitInfo.transitiveImports.length} total transitive dependencies`
   }
 
   children() {
