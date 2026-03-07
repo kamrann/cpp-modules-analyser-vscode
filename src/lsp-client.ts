@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as vscode from 'vscode';
-import { BaseLanguageClient, GenericNotificationHandler, ResponseError } from 'vscode-languageclient';
+import { BaseLanguageClient, GenericNotificationHandler, ResponseError, TextDocumentIdentifier } from 'vscode-languageclient';
 import { Utils } from 'vscode-uri';
 import { ModulesTreeProvider } from './ui/modules-tree';
 import { ModuleUnitImportsTreeProvider } from './ui/module-unit-imports-tree';
@@ -12,6 +12,7 @@ import { ModuleUnitImporteesTreeProvider } from './ui/module-unit-importees-tree
 import { ModulesModel } from './modules-model';
 import { DelegatingTreeDataProvider } from './ui/tree-provider';
 import { ProcessedSourceViewEditorProvider } from './processed-view/processed-view-custom-editor';
+import { AnalyzerDecorationProvider } from './file-decoration-provider';
 
 export const clientName = 'cppModulesAnalyser';
 
@@ -226,11 +227,12 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     };
   });
 
-  interface PreprocessedTU {
+  interface TUState {
+    state: string;
     ppTokens: string[];
     tokens: string[];
   }
-  const preprocessedTUs: Record<string, PreprocessedTU> = {};
+  const tuStates: Record<string, TUState> = {};
 
   const TUQueryKeys = {
     view: 'view',
@@ -250,6 +252,10 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     });
   };
 
+  const processedUriRemapping = (uri: string) => {
+    return uri.slice(0, -'.processed'.length);
+  };
+
   const preprocessedSourceProvider = new (class implements vscode.TextDocumentContentProvider {
     onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
     onDidChange = this.onDidChangeEmitter.event;
@@ -257,8 +263,8 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
 
     provideTextDocumentContent(uri: vscode.Uri): string | undefined {
       const baseUri = uri.with({ query: '', fragment: '' });
-      const tu = preprocessedTUs[baseUri.toString()];
-      if (!tu) {
+      const tu = tuStates[processedUriRemapping(baseUri.toString())];
+      if (!tu || tu.ppTokens == null) {
         // may make more sense to show a notification or log something
         return undefined; //'<unavailable>';
       }
@@ -293,20 +299,42 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     }
   });
 
+  const decorationProvider = new AnalyzerDecorationProvider();
+
   client.onNotification('cppModulesAnalyser/publishTranslationUnitInfo', (params) => {
     //handlePublishTranslationUnitInfo(params, client, preprocessedTUs);
     const fileUri = client.protocol2CodeConverter.asUri(params.uri);
     const virtualUri = adaptUriForProcessed(fileUri);
+    const uriLookup = fileUri.toString(); //virtualUriScheme.toString();
     switch (params.event) {
-      case 'update':
-        preprocessedTUs[virtualUri.toString()] = {
+      case 'reset':
+        delete tuStates[uriLookup];
+        decorationProvider.clear(fileUri);
+        break;
+      case 'pending':
+        tuStates[uriLookup].state = 'pending';
+        decorationProvider.setPending(fileUri);
+        break;
+      case 'preprocessed':
+        tuStates[uriLookup] = {
+          state: 'preprocessed',
           ppTokens: params.ppTokens,
           tokens: params.tokens,
         };
+        decorationProvider.clear(fileUri);
         break;
-      // need to update, think server currently sends this in case of preprocessor fail
-      case 'pending':
-        delete preprocessedTUs[virtualUri.toString()];
+      case 'analysing':
+        tuStates[uriLookup].state = 'analysing';
+        decorationProvider.setAnalysing(fileUri);
+        // @todo: will need to clear uris if they cease to exist
+        break;
+      case 'analysed':
+        tuStates[uriLookup].state = 'analysed';
+        decorationProvider.clear(fileUri);
+        break;
+      default:
+        tuStates[uriLookup].state = params.event;
+        decorationProvider.clear(fileUri);
         break;
     }
     //preprocessedSourceProvider.onDidChangeEmitter.fire(virtualUri);
@@ -318,6 +346,8 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
   devRecompileCmd = vscode.commands.registerCommand(commandId('dev.recompileToolchain'), () => {
     client.sendNotification('cppModulesAnalyser/dev/recompileToolchain');
   });
+
+  context.subscriptions.push(vscode.window.registerFileDecorationProvider(decorationProvider));
 
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(virtualUriScheme, preprocessedSourceProvider));
 
@@ -357,9 +387,24 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
   const openPreprocessedSourceCommand = vscode.commands.registerCommand(commandId('openPreprocessed'), async () => {
     await openVirtualSourceView(TUViewModeParams.preprocessed);
   });
+  const scopeNamesCommand = vscode.commands.registerCommand(commandId('cpp.scopeNames'), async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return;
+    }
+    //const line = editor.selection.active.line;
+    const result = await client.sendRequest('cppModulesAnalyser/scopeNames', {
+      textDocument: TextDocumentIdentifier.create(client.code2ProtocolConverter.asUri(editor.document.uri)),
+      positions: editor.selection.active,
+    });
+    if (typeof result === "object" && result !== null) {
+      client.outputChannel.appendLine(JSON.stringify(result));
+    }
+  });
 
   context.subscriptions.push(openPPTokensSourceCommand);
   context.subscriptions.push(openPreprocessedSourceCommand);
+  context.subscriptions.push(scopeNamesCommand);
 }
 
 export function shutdownClient(context: vscode.ExtensionContext, client: BaseLanguageClient) {
