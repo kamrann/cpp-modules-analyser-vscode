@@ -20,6 +20,12 @@ export function determineServerOptionsNative(
   if (envOverrides.dumpTrace) {
     commonArgs.push('--dump-trace');
   }
+  if (envOverrides.traceCategories.length > 0) {
+    commonArgs.push(`--trace="${envOverrides.traceCategories.join(',')}"`);
+  }
+  if (envOverrides.dumpProfilingDir) {
+    commonArgs.push(`--dump-dir="${envOverrides.dumpProfilingDir}"`);
+  }
 
   const nativeArgs = [];
 

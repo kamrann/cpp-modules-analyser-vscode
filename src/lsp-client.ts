@@ -53,6 +53,7 @@ const commandId = (id: string) => {
 let handlePublishTranslationUnitInfo: GenericNotificationHandler;
 let handlePublishModulesInfo: GenericNotificationHandler;
 let devRecompileCmd: vscode.Disposable | undefined;
+let serializeParseContextCmd: vscode.Disposable | undefined;
 
 export function oneTimeInit(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration(clientName);
@@ -68,7 +69,7 @@ export function oneTimeInit(context: vscode.ExtensionContext) {
   const modulesData = new ModulesModel();
 
   interface ViewModeState {
-    displayName: string,
+    displayName: string;
     provider: vscode.TreeDataProvider<vscode.TreeItem>;
     message: string | undefined;
   }
@@ -252,8 +253,11 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     });
   };
 
-  const processedUriRemapping = (uri: string) => {
-    return uri.slice(0, -'.processed'.length);
+  const processedUriRemapping = (uri: vscode.Uri) => {
+    return uri.with({
+      scheme: 'file',
+      path: uri.path.slice(0, -'.processed'.length),
+    });
   };
 
   const preprocessedSourceProvider = new (class implements vscode.TextDocumentContentProvider {
@@ -263,7 +267,7 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
 
     provideTextDocumentContent(uri: vscode.Uri): string | undefined {
       const baseUri = uri.with({ query: '', fragment: '' });
-      const tu = tuStates[processedUriRemapping(baseUri.toString())];
+      const tu = tuStates[processedUriRemapping(baseUri).toString()];
       if (!tu || tu.ppTokens == null) {
         // may make more sense to show a notification or log something
         return undefined; //'<unavailable>';
@@ -300,6 +304,17 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
   });
 
   const decorationProvider = new AnalyzerDecorationProvider();
+  const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  context.subscriptions.push(statusItem);
+
+  interface ActiveJob {
+    displayName: string;
+  }
+  const activeJobs = new Map<string, ActiveJob>();
+
+  const refreshStatusTooltip = () => {
+    statusItem.tooltip = activeJobs.size > 0 ? [...activeJobs.values()].map(j => j.displayName).join('\n') : "";
+  };
 
   client.onNotification('cppModulesAnalyser/publishTranslationUnitInfo', (params) => {
     //handlePublishTranslationUnitInfo(params, client, preprocessedTUs);
@@ -310,6 +325,8 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
       case 'reset':
         delete tuStates[uriLookup];
         decorationProvider.clear(fileUri);
+        activeJobs.delete(uriLookup);
+        refreshStatusTooltip();
         break;
       case 'pending':
         tuStates[uriLookup].state = 'pending';
@@ -326,11 +343,15 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
       case 'analysing':
         tuStates[uriLookup].state = 'analysing';
         decorationProvider.setAnalysing(fileUri);
+        activeJobs.set(uriLookup, { displayName: Utils.basename(fileUri), });
+        refreshStatusTooltip();
         // @todo: will need to clear uris if they cease to exist
         break;
       case 'analysed':
         tuStates[uriLookup].state = 'analysed';
         decorationProvider.clear(fileUri);
+        activeJobs.delete(uriLookup);
+        refreshStatusTooltip();
         break;
       default:
         tuStates[uriLookup].state = params.event;
@@ -340,11 +361,36 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     //preprocessedSourceProvider.onDidChangeEmitter.fire(virtualUri);
     preprocessedSourceProvider.onBaseUriChanged(virtualUri);
   });
+
   client.onNotification('cppModulesAnalyser/publishModulesInfo', handlePublishModulesInfo);
+
+  client.onNotification('cppModulesAnalyser/statusUpdate', (params) => {
+    switch (params.event) {
+      case 'clear':
+        statusItem.hide();
+        break;
+      case 'update':
+        statusItem.text = `$(sync~spin) ${params.status}`;
+        statusItem.show();
+        break;
+    }
+  });
 
   // @todo: make conditional based on dev build
   devRecompileCmd = vscode.commands.registerCommand(commandId('dev.recompileToolchain'), () => {
     client.sendNotification('cppModulesAnalyser/dev/recompileToolchain');
+  });
+  serializeParseContextCmd = vscode.commands.registerCommand(commandId('dev.serializeTUParseContext'), async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return;
+    }
+    const result = await client.sendRequest('cppModulesAnalyser/dev/serializeTUParseContext', {
+      textDocument: TextDocumentIdentifier.create(client.code2ProtocolConverter.asUri(editor.document.uri)),
+    });
+    if (typeof result === "object" && result !== null) {
+      client.outputChannel.appendLine(JSON.stringify(result));
+    }
   });
 
   context.subscriptions.push(vscode.window.registerFileDecorationProvider(decorationProvider));
@@ -410,4 +456,6 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
 export function shutdownClient(context: vscode.ExtensionContext, client: BaseLanguageClient) {
   devRecompileCmd?.dispose();
   devRecompileCmd = undefined;
+  serializeParseContextCmd?.dispose();
+  serializeParseContextCmd = undefined;
 }

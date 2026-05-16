@@ -64,6 +64,11 @@
         "title": "Recompile Analyser Toolchain"
       },
       {
+        "command": "tokamak.cpp-modules-analyser-vscode.dev.serializeTUParseContext",
+        "category": "Development",
+        "title": "Serialize TU Parse Context"
+      },
+      {
         "command": "tokamak.cpp-modules-analyser-vscode.openPPTokens",
         "category": "Development",
         "title": "Open PP Tokens"
@@ -72,6 +77,11 @@
         "command": "tokamak.cpp-modules-analyser-vscode.openPreprocessed",
         "category": "Development",
         "title": "Open Preprocessed"
+      },
+      {
+        "command": "tokamak.cpp-modules-analyser-vscode.cpp.scopeNames",
+        "category": "Cpp",
+        "title": "Scope Names"
       }
     ],
     "views": {
@@ -201,7 +211,7 @@
           "default": false,
           "description": "Permits some things specified as ill-formed by the standard but widely undiagnosed by existing compiler implementations."
         },
-				"cppModulesAnalyser.enableFullAnalysisMode": {
+        "cppModulesAnalyser.enableFullAnalysisMode": {
           "scope": "resource",
           "type": "boolean",
           "default": false,
