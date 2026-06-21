@@ -441,16 +441,58 @@ export function initializeClient(context: vscode.ExtensionContext, client: BaseL
     //const line = editor.selection.active.line;
     const result = await client.sendRequest('cppModulesAnalyser/scopeNames', {
       textDocument: TextDocumentIdentifier.create(client.code2ProtocolConverter.asUri(editor.document.uri)),
-      positions: editor.selection.active,
+      position: client.code2ProtocolConverter.asPosition(editor.selection.active),
     });
     if (typeof result === "object" && result !== null) {
       client.outputChannel.appendLine(JSON.stringify(result));
+    }
+  });
+  const nameLookupCommand = vscode.commands.registerCommand(commandId('cpp.nameLookup'), async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return;
+    }
+
+    const name = await vscode.window.showInputBox({
+      //prompt: 'Enter a name',
+      placeHolder: 'symbol_name',
+      validateInput: (value) => {
+        if (!value.trim()) {
+          return 'Name cannot be empty';
+        }
+        return null;
+      }
+    });
+
+    // User cancelled
+    if (name === undefined) {
+      return;
+    }
+
+    //const line = editor.selection.active.line;
+    try {
+      const result = await client.sendRequest('cppModulesAnalyser/nameLookup', {
+        textDocument: TextDocumentIdentifier.create(client.code2ProtocolConverter.asUri(editor.document.uri)),
+        position: client.code2ProtocolConverter.asPosition(editor.selection.active),
+        name: name,
+      });
+      if (typeof result === "object" && result !== null) {
+        client.outputChannel.appendLine(JSON.stringify(result));
+      }
+    } catch (e) {
+      if (e instanceof ResponseError) {
+        console.log(e.code, e.message, e.data);
+        return;
+      }
+
+      throw e;
     }
   });
 
   context.subscriptions.push(openPPTokensSourceCommand);
   context.subscriptions.push(openPreprocessedSourceCommand);
   context.subscriptions.push(scopeNamesCommand);
+  context.subscriptions.push(nameLookupCommand);
 }
 
 export function shutdownClient(context: vscode.ExtensionContext, client: BaseLanguageClient) {

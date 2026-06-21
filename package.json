@@ -82,6 +82,11 @@
         "command": "tokamak.cpp-modules-analyser-vscode.cpp.scopeNames",
         "category": "Cpp",
         "title": "Scope Names"
+      },
+      {
+        "command": "tokamak.cpp-modules-analyser-vscode.cpp.nameLookup",
+        "category": "Cpp",
+        "title": "Name Lookup"
       }
     ],
     "views": {
